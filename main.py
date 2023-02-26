@@ -1,6 +1,8 @@
 import time
 import logging
 import json
+import array_helper
+import mysql.connector
 
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -13,7 +15,6 @@ class InstaDiscover:
     def load_config(self):
         with open("config.json", "r") as file:
             self.config = json.load(file)
-            logging.info(self.config)
 
     def configuration_driver(self):
         desired_capabilities = DesiredCapabilities.CHROME
@@ -26,13 +27,18 @@ class InstaDiscover:
     def set_default_values(self):
         self.url = 'https://www.instagram.com'
 
-    def read_network_log(self):
+    def read_network_log(self, url):
         logs = self.driver.get_log("performance")
-        # logging.info(logs)
         for log in logs:
-            logging.info(log)
-            # network_log = json.loads(log["message"])["message"]
-            # if ("Network.response" in network_log["method"])
+            network_log = json.loads(log["message"])["message"]
+            if "Network.response" in network_log["method"]:
+                if array_helper.keys_exists(network_log, ['params', 'response', 'url']) is True:
+                    if network_log['params']['response']['url'].find(url) != -1:
+                        return json.loads(self.driver.execute_cdp_cmd(
+                            'Network.getResponseBody', {'requestId': network_log["params"]["requestId"]}
+                        )['body'])
+
+        return None
 
     def __init__(self):
         self.driver: webdriver.Chrome | None = None
@@ -58,18 +64,28 @@ class InstaDiscover:
         time.sleep(1)
         loginButton.click()
         logging.info('Logged in')
-        self.read_network_log()
         time.sleep(3)
 
     def discover(self):
         self.driver.get(self.url + '/explore/people/')
+        time.sleep(3)  # loading discover screen
+        response = self.read_network_log(self.url + '/api/v1/discover/ayml/')
+        if response is not None:
+            if array_helper.keys_exists(response, ['groups', 0, 'items']) is True:
+                items = response['groups'][0]['items']
+                for item in items:
+                    if array_helper.keys_exists(item, ['user', 'username']) is True:
+                        logging.info(item['user']['username'])
 
 
 if __name__ == '__main__':
     # try:
     logging.basicConfig(filename='process.log', encoding='utf-8', level=logging.INFO)
+    logging.info('step 1')
     insta = InstaDiscover()
+    logging.info('step 2')
     insta.login()
+    logging.info('step 3')
     insta.discover()
     insta.close_browser()
     # except Exception:
