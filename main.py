@@ -1,11 +1,12 @@
+import sys
 import time
 import logging
 import json
-import array_helper
-import mysql.connector
+
+from helpers import array_helper
+from helpers import database_helper
 
 from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities  # read network
 
@@ -77,16 +78,30 @@ class InstaDiscover:
                     if array_helper.keys_exists(item, ['user', 'username']) is True:
                         logging.info(item['user']['username'])
 
-
 if __name__ == '__main__':
+
     # try:
     logging.basicConfig(filename='process.log', encoding='utf-8', level=logging.INFO)
+
+    database_helper.insert(database_helper.TABLE.DISCOVER_USERS.value, {
+        'insta_id': 1234,
+        'username': 'test',
+        'full_name': 'test2',
+        'profile_pic_url': 'test3',
+    })
+
+    database_helper.commit()
+    sys.exit()
+
     logging.info('step 1')
     insta = InstaDiscover()
     logging.info('step 2')
+
     insta.login()
     logging.info('step 3')
     insta.discover()
     insta.close_browser()
+
+
     # except Exception:
     #     logging.exception("message")
