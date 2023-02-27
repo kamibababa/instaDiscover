@@ -31,15 +31,10 @@ def close():
 def insert(table, data):
     query = "INSERT INTO " + table + " ("
     for key in data.keys():
-        print(key)
         query += key + ","
     query = query.strip(',') + ')'
     query += ' VALUES ('
     for value in data.values():
-        print(value)
-        if type(value) is int:
-            query += str(value) + ","
-        else:
-            query += "'" + str(value) + "',"
+        query += "'" + str(value) + "',"
     query = query.strip(',') + ')'
     cursor.execute(query)

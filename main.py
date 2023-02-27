@@ -3,6 +3,8 @@ import time
 import logging
 import json
 
+from selenium.webdriver import Keys
+
 from helpers import array_helper
 from helpers import database_helper
 
@@ -76,32 +78,32 @@ class InstaDiscover:
                 items = response['groups'][0]['items']
                 for item in items:
                     if array_helper.keys_exists(item, ['user', 'username']) is True:
-                        logging.info(item['user']['username'])
+                        database_helper.insert(database_helper.TABLE.DISCOVER_USERS.value, {
+                            'insta_id': item['user']['pk'],
+                            'username': item['user']['username'],
+                            'full_name': item['user']['full_name'],
+                            'profile_pic_url': item['user']['profile_pic_url'],
+                        })
+                database_helper.commit()
+                follow_buttons = self.driver.find_elements(By.XPATH, "//*[@class='_acan _acap _acas _aj1-']")
+                for follow_button in follow_buttons:
+                    follow_button.click()
+                    time.sleep(1)
+                time.sleep(2)
+
 
 if __name__ == '__main__':
-
     # try:
     logging.basicConfig(filename='process.log', encoding='utf-8', level=logging.INFO)
-
-    database_helper.insert(database_helper.TABLE.DISCOVER_USERS.value, {
-        'insta_id': 1234,
-        'username': 'test',
-        'full_name': 'test2',
-        'profile_pic_url': 'test3',
-    })
-
-    database_helper.commit()
-    sys.exit()
 
     logging.info('step 1')
     insta = InstaDiscover()
     logging.info('step 2')
-
     insta.login()
     logging.info('step 3')
     insta.discover()
-    insta.close_browser()
 
+    insta.close_browser()
 
     # except Exception:
     #     logging.exception("message")
