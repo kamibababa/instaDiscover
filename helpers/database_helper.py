@@ -59,7 +59,16 @@ def update(table, criteria, data, commit_status=True):
     query = query.rstrip(',')
     if criteria != '':
         query += ' WHERE ' + criteria
-    print(query)
+    result = cursor.execute(query)
+    if commit_status is True:
+        commit()
+    return result
+
+
+def delete(table, criteria='', commit_status=True):
+    query = "DELETE FROM " + table + ""
+    if criteria != '':
+        query += ' WHERE ' + criteria
     result = cursor.execute(query)
     if commit_status is True:
         commit()

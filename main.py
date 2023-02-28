@@ -69,7 +69,7 @@ class InstaDiscover:
         time.sleep(1)
         loginButton.click()
         logging.info('Logged in')
-        time.sleep(3)
+        time.sleep(6)
 
     def discover(self):
         self.driver.get(self.url + '/explore/people/')
@@ -85,13 +85,10 @@ class InstaDiscover:
                             'username': item['user']['username'],
                             'full_name': item['user']['full_name'],
                             'profile_pic_url': item['user']['profile_pic_url'],
-                            'expires_at': (datetime.now() + timedelta(days=5)).strftime('%Y-%m-%d %H:%M:%S')
+                            'expires_at': (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
                         })
                 database_helper.commit()
-                follow_buttons = self.driver.find_elements(By.XPATH, "//*[@class='_acan _acap _acas _aj1-']")
-                for follow_button in follow_buttons:
-                    follow_button.click()
-                    time.sleep(1)
+                self.follows_press()
                 time.sleep(2)
 
     def check_up_users(self):
@@ -109,7 +106,7 @@ class InstaDiscover:
                     user = response['data']['user']
                     """
                     requested_by_viewer: true //takip istegi yollanmis
-                    followed_by_viewer: false //takip istegi kabul edilmis
+                    followed_by_viewer: false //takip istegimi kabul edilmis
                     follows_viewer: false // takip istegini kabul etmisim
                     """
                     database_helper.update(  # ilgili kisiyle alakali son durum guncellemesi
@@ -121,39 +118,80 @@ class InstaDiscover:
                         }
                     )
 
-                    # takip istegimi kabul etmis veya istek gonderildide bekliyor
-                    if (user['follows_viewer']) or user['requested_by_viewer']:
-                        # takip istegi atildigindan 15 gun gecmis ve kabul etmemis ise user silinecek
-                        if (datetime.now() - user['follow_request_count']).days > 15:
-                            print(discover_user['username'] + ' takip istegi 15 gunu asmis ve user silinecek')
+                    if user['follows_viewer']:  # takip isteğini kabul etmişim o beni takip ediyor
+                        self.extend_expires(discover_user)
+                        print(discover_user['username'] + ' kişi takipte kaldığı için kontrol süresi uzatıldı.')
+                        time.sleep(1)
+                    elif user['requested_by_viewer']:  # takip isteği atılmış ve bekliyor
+                        if (datetime.now() - discover_user['last_follow_request_at']).days > 15:
+                            # gönderilen istek iptal ediliyor.
+                            self.unfollow_press()
+                            database_helper.delete(database_helper.TABLE.DISCOVER_USERS.value,
+                                                   'id=' + str(discover_user['id']))
+                            print(discover_user['username'] +
+                                  ' takip isteği 15 günü aşmış user silinecek ve istek iptal edilecek!')
                         else:
-                            database_helper.update(
-                                database_helper.TABLE.DISCOVER_USERS.value,
-                                'id=' + str(discover_user['id']), {
-                                    # kontrol suresi 5 gun uzatildi
-                                    'expires_at': (discover_user['expires_at'] + timedelta(days=5))
-                                }
-                            )
-                            print(discover_user['username'] + ' expires at uzatildi')
-                    elif user['followed_by_viewer'] is False:
-                        print(discover_user['username'] + ' takip istegim iptal edilmis veya hic yollamamisim :&')
-                        if discover_user['follow_request_count'] > 3:
-                            print(discover_user['username'] + ' 3 kez takip istegi kabul edilmemis user silinecek')
-                        else:
-                            database_helper.update(
-                                database_helper.TABLE.DISCOVER_USERS.value, 'id=' + str(discover_user['id']), {
-                                    'follow_request_count': discover_user['follow_request_count'] + 1,
-                                    'last_follow_request_at': datetime.now()
-                                }
-                            )
-                            self.driver.find_element(By.XPATH, "//*[@class='_acan _acap _acas _aj1-']").click()
+                            print(discover_user['username'] + ' takip isteği gönderilmiş beklemede 15 günü aşmamış.')
+                        time.sleep(1)
+                    elif user['followed_by_viewer'] is False:  # takip isteği atmışım ancak reddetmiş
+                        print(discover_user['username'] + ' atılan takip isteğini iptal etmiş.')
+                        self.follower_evaluation(discover_user)
+                        time.sleep(1)
+                    else:  # followed_by_viewer is True # Takip isteği atmışım ve istek bekliyor
+                        # geri takip suresi asilmis mi veya kontrol süresi aşılmış mı ?
+                        if datetime.now() > discover_user['expires_at']:
+                            self.unfollow_press()  # takip den cıkılıyor
+                            follower_evaluation_status = self.follower_evaluation(discover_user)  # degerlendirme
+                            if follower_evaluation_status is True:
+                                print(discover_user['username']
+                                      + ' geri takip süresi aşılmış ve değerlendirme iptal oldu!')
+                            else:
+                                self.extend_expires(discover_user)
+                                print(discover_user['username'] + ' değerlendirme süresi verildi')
                             time.sleep(1)
-                    else:  # followed_by_viewer is True # takip istegi atilmis beklemede
-                        if datetime.now() > discover_user['expires_at']:  # geri takip suresi asilmis mi ?
-                            print(discover_user['username']
-                                  + ' sure asilmis ve kullanici takipten cikalacak ve user silinecek')
             else:
                 print(discover_user['username'] + ' ERISIM SAGLANAMADI')
+
+    def unfollow_press(self):
+        self.driver.find_element(By.XPATH, "//*[@class='_acan _acap _acat _aj1-']").click()  # unfollow button
+        time.sleep(1)
+        self.driver.find_element(By.XPATH, "//*[@class='_abm4'][5]").click()  # popup approved button
+        time.sleep(2)
+
+    def follows_press(self):
+        follow_buttons = self.driver.find_elements(By.XPATH, "//*[@class='_acan _acap _acas _aj1-']")
+        for follow_button in follow_buttons:
+            follow_button.click()
+            time.sleep(1)
+        time.sleep(2)
+
+    def follower_evaluation(self, discover_user):
+        if discover_user['follow_request_count'] > 4:
+            database_helper.delete(database_helper.TABLE.DISCOVER_USERS.value,
+                                   'id=' + str(discover_user['id']))
+            print(discover_user['username'] + ' 4 kez takip isteği kabul edilmemiş user silindi!')
+            return True
+        else:
+            # Takip et butonuna basılıyor
+            self.follows_press()
+            database_helper.update(
+                database_helper.TABLE.DISCOVER_USERS.value, 'id=' + str(discover_user['id']), {
+                    'follow_request_count': discover_user['follow_request_count'] + 1,
+                    'last_follow_request_at': datetime.now()
+                }
+            )
+            print(discover_user['username'] + ' ait '
+                  + str(discover_user['follow_request_count'] + 1) + ' kez takip isteği gönderildi')
+            time.sleep(1)
+            return False
+
+    def extend_expires(self, discover_user):
+        database_helper.update(
+            database_helper.TABLE.DISCOVER_USERS.value,
+            'id=' + str(discover_user['id']), {
+                'expires_at': (discover_user['expires_at'] + timedelta(days=5))
+            }
+        )
 
 
 if __name__ == '__main__':
@@ -173,7 +211,9 @@ if __name__ == '__main__':
 
     # except Exception:
     #     logging.exception("message")
+
     ### TEST
+
     # row = database_helper.find(database_helper.TABLE.DISCOVER_USERS.value, 'id=151')
     # database_helper.update(database_helper.TABLE.DISCOVER_USERS.value, 'id=' + str(row['id']), {
     #     'expires_at': '2021-12-11 12:11:05'
