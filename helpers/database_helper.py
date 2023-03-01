@@ -32,10 +32,10 @@ def insert(table, data):
         query += key + ","
     query = query.rstrip(',') + ')'
     query += ' VALUES ('
-    for value in data.values():
-        query += "'" + str(value) + "',"
+    for key in data.keys():
+        query += "%(" + key + ")s,"
     query = query.rstrip(',') + ')'
-    return cursor.execute(query)
+    return cursor.execute(query, data)
 
 
 def find_all(table, columns='*'):
@@ -54,12 +54,12 @@ def find(table, criteria='', columns='*'):
 
 def update(table, criteria, data, commit_status=True):
     query = "UPDATE " + table + " SET "
-    for key, value in data.items():
-        query += key + " = '" + str(value) + "',"
+    for key in data.keys():
+        query += key + " = %(" + str(key) + ")s,"
     query = query.rstrip(',')
     if criteria != '':
         query += ' WHERE ' + criteria
-    result = cursor.execute(query)
+    result = cursor.execute(query, data)
     if commit_status is True:
         commit()
     return result
