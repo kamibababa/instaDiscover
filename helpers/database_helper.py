@@ -1,12 +1,5 @@
 import mysql.connector
 
-from enum import Enum
-
-
-class TABLE(Enum):
-    DISCOVER_USERS = 'discover_users'
-
-
 connection = mysql.connector.connect(
     host='127.0.0.1', database='insta_discover', user='root', password=''
 )
