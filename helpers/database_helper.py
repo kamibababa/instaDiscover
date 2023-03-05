@@ -19,7 +19,7 @@ def close():
     connection.close()
 
 
-def insert(table, data):
+def insert(table, data, commit_status=False):
     query = "INSERT INTO " + table + " ("
     for key in data.keys():
         query += key + ","
@@ -28,7 +28,11 @@ def insert(table, data):
     for key in data.keys():
         query += "%(" + key + ")s,"
     query = query.rstrip(',') + ')'
-    return cursor.execute(query, data)
+
+    result = cursor.execute(query, data)
+    if commit_status is True:
+        commit()
+    return result
 
 
 def find_all(table, columns='*'):

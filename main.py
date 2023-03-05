@@ -106,6 +106,7 @@ class InstaDiscover:
 
                                 if int(item['is_verified']) is False:
                                     database_helper.insert('discover_users', {
+                                        'account_name': self.account_name,
                                         'insta_id': item['user']['pk'],
                                         'username': item['user']['username'],
                                         'full_name': item['user']['full_name'],
@@ -233,6 +234,15 @@ class InstaDiscover:
             }
         )
 
+    def get_profile_info(self, profile_name):
+        self.driver.get(self.url + '/' + profile_name + '/')
+        time.sleep(2)  # loading profile
+        response = self.read_network_log(self.url + '/api/v1/users/web_profile_info/?username=' + profile_name)
+        if response is not None:
+            if array_helper.keys_exists(response, ['data', 'user']) is True:
+                return response['data']['user']
+        return None
+
     def sync_followers(self):
         profile = self.get_profile_info(self.account_name)
         if profile is not None:
@@ -244,8 +254,9 @@ class InstaDiscover:
             while True:
                 # scroll down
                 self.driver.execute_script(
-                    "document.getElementsByClassName('_aano')[0].scrollTop = document.getElementsByClassName('_aano')[0].scrollHeight")
-                time.sleep(2)  # scrolldown ediltikden sonra yuklemeyi bekliyoruz.
+                    "document.getElementsByClassName('_aano')[0].scrollTop = "
+                    "document.getElementsByClassName('_aano')[0].scrollHeight")
+                time.sleep(3)  # scrolldown ediltikden sonra yuklemeyi bekliyoruz.
                 scrollHeight = self.driver.execute_script(
                     "return document.getElementsByClassName('_aano')[0].scrollHeight")
                 if tempScrollHeight == scrollHeight:  # ayni scrollheight sahip ise daha sona gidermiyor demektir.
@@ -254,12 +265,17 @@ class InstaDiscover:
                 else:
                     tempScrollHeight = scrollHeight
 
+            time.sleep(2)  # loading network
             responses = self.read_network_logs(
                 self.url + '/api/v1/friendships/' + str(profile['id']) + '/followers/?count=12')
+            usernames = ''
             for response in responses:
                 for user in response['users']:
-                    where = "account_name='" + self.account_name + "' AND username='" + user['username'] + "'"
-                    if database_helper.find('followers', where, 'id,username') is None:
+                    usernames += "'" + user['username'] + "',"
+                    find_result = database_helper.find(
+                        'followers', "account_name='" + self.account_name + "' AND username='" + user['username'] + "'",
+                        'id,username')
+                    if find_result is None:
                         database_helper.insert('followers', {
                             'account_name': self.account_name,
                             'insta_id': user['pk'],
@@ -267,37 +283,95 @@ class InstaDiscover:
                             'full_name': user['full_name'],
                             'is_verified': user['is_verified'],
                             'profile_pic_url': user['profile_pic_url']
-                        })
+                        }, True)
                     else:
-                        database_helper.update('followers', where, {
+                        database_helper.update('followers', 'id=' + str(find_result['id']), {
                             'account_name': self.account_name,
                             'insta_id': user['pk'],
                             'username': user['username'],
                             'full_name': user['full_name'],
                             'is_verified': user['is_verified'],
                             'profile_pic_url': user['profile_pic_url']
-                        }, False)
-            database_helper.commit()
+                        })
+            if usernames != '':
+                usernames = usernames.rstrip(',')
+                database_helper.delete(
+                    'followers', "account_name='" + self.account_name + "' AND username NOT IN(" + usernames + ")")
+
             print('synchronized followers')
         else:
             print('insta_id not found')
 
-    def get_profile_info(self, profile_name):
-        self.driver.get(self.url + '/' + profile_name + '/')
-        time.sleep(2)  # loading profile
-        response = self.read_network_log(self.url + '/api/v1/users/web_profile_info/?username=' + profile_name)
-        if response is not None:
-            if array_helper.keys_exists(response, ['data', 'user']) is True:
-                return response['data']['user']
-        return None
+    def sync_following(self):
+        profile = self.get_profile_info(self.account_name)
+        if profile is not None:
+            followerButtom = self.driver.find_elements(By.XPATH, "//*[@class='_aacl _aacp _aacu _aacx _aad6 _aade']")[2]
+            followerButtom.click()
+
+            time.sleep(2)  # loading following
+            tempScrollHeight = self.driver.execute_script(
+                "return document.getElementsByClassName('_aano')[0].scrollHeight")
+            while True:
+                # scroll down
+                self.driver.execute_script(
+                    "document.getElementsByClassName('_aano')[0].scrollTop = "
+                    "document.getElementsByClassName('_aano')[0].scrollHeight")
+                time.sleep(3)  # scrolldown ediltikden sonra yuklemeyi bekliyoruz.
+                scrollHeight = self.driver.execute_script(
+                    "return document.getElementsByClassName('_aano')[0].scrollHeight")
+                if tempScrollHeight == scrollHeight:  # ayni scrollheight sahip ise daha sona gidermiyor demektir.
+                    print('ended scroll down')
+                    break
+                else:
+                    tempScrollHeight = scrollHeight
+
+            time.sleep(2)  # loading network
+            responses = self.read_network_logs(
+                self.url + '/api/v1/friendships/' + str(profile['id']) + '/following/?count=12')
+            usernames = ''
+            for response in responses:
+                for user in response['users']:
+                    usernames += "'" + user['username'] + "',"
+                    find_result = database_helper.find(
+                        'following', "account_name='" + self.account_name + "' AND username='" + user['username'] + "'",
+                        'id,username')
+                    if find_result is None:
+                        database_helper.insert('following', {
+                            'account_name': self.account_name,
+                            'insta_id': user['pk'],
+                            'username': user['username'],
+                            'full_name': user['full_name'],
+                            'is_verified': user['is_verified'],
+                            'profile_pic_url': user['profile_pic_url']
+                        }, True)
+                    else:
+                        database_helper.update('following', 'id=' + str(find_result['id']), {
+                            'account_name': self.account_name,
+                            'insta_id': user['pk'],
+                            'username': user['username'],
+                            'full_name': user['full_name'],
+                            'is_verified': user['is_verified'],
+                            'profile_pic_url': user['profile_pic_url']
+                        })
+            if usernames != '':
+                usernames = usernames.rstrip(',')
+                database_helper.delete(
+                    'following', "account_name='" + self.account_name + "' AND username NOT IN(" + usernames + ")")
+
+            print('synchronized following')
+        else:
+            print('profile id not found')
+
 
 
 if __name__ == '__main__':
     # try:
     logging.basicConfig(filename='process.log', encoding='utf-8', level=logging.INFO)
     insta = InstaDiscover()
+
     insta.login()
-    insta.sync_followers()
+    # insta.sync_followers()
+    insta.sync_following()
     # while True:
     #     for i in range(1, 2, 1):
     #         insta.discover()
