@@ -45,6 +45,20 @@ class InstaDiscover:
 
         return None
 
+    def read_network_logs(self, url):
+        data = []
+        logs = self.driver.get_log("performance")
+        for log in logs:
+            network_log = json.loads(log["message"])["message"]
+            if "Network.response" in network_log["method"]:
+                if array_helper.keys_exists(network_log, ['params', 'response', 'url']) is True:
+                    if network_log['params']['response']['url'].find(url) != -1:
+                        data.append(json.loads(self.driver.execute_cdp_cmd(
+                            'Network.getResponseBody', {'requestId': network_log["params"]["requestId"]}
+                        )['body']))
+
+        return data
+
     def __init__(self):
         self.driver: webdriver.Chrome | None = None
         self.config = None
@@ -53,6 +67,8 @@ class InstaDiscover:
         self.configuration_driver()
         self.load_config()
         self.set_default_values()
+
+        self.account_name = self.config['login']['username']
 
     def close_browser(self):
         print('closing browser')
@@ -84,15 +100,19 @@ class InstaDiscover:
                     for item in items:
                         if array_helper.keys_exists(item, ['user', 'username']) is True:
                             # daha önceden bu username veritabanına kayıt olmuş mu ?
-                            if database_helper.find('discover_users', 
-                                                    "username='"+item['user']['username']+"'", 'id,username') is None:
-                                database_helper.insert('discover_users', {
-                                    'insta_id': item['user']['pk'],
-                                    'username': item['user']['username'],
-                                    'full_name': item['user']['full_name'],
-                                    'profile_pic_url': item['user']['profile_pic_url'],
-                                    'expires_at': (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
-                                })
+                            if database_helper.find('discover_users',
+                                                    "username='" + item['user']['username'] + "'",
+                                                    'id,username') is None:
+
+                                if int(item['is_verified']) is False:
+                                    database_helper.insert('discover_users', {
+                                        'insta_id': item['user']['pk'],
+                                        'username': item['user']['username'],
+                                        'full_name': item['user']['full_name'],
+                                        'is_verified': int(item['is_verified']),
+                                        'profile_pic_url': item['user']['profile_pic_url'],
+                                        'expires_at': (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d %H:%M:%S')
+                                    })
                     database_helper.commit()
                     self.follows_press()
                     time.sleep(2)
@@ -110,7 +130,7 @@ class InstaDiscover:
         for discover_user in discover_users:
             username = discover_user['username']
             self.driver.get(self.url + '/' + username + '/')
-            time.sleep(2)  # loading profile
+            time.sleep(10)  # loading profile
             try:
                 response = self.read_network_log(self.url + '/api/v1/users/web_profile_info/?username=' + username)
                 if response is not None:
@@ -127,6 +147,7 @@ class InstaDiscover:
                                 'requested_by_viewer': int(user['requested_by_viewer']),
                                 'followed_by_viewer': int(user['followed_by_viewer']),
                                 'follows_viewer': int(user['follows_viewer']),
+                                'is_verified': int(user['is_verified'])
                             }
                         )
 
@@ -143,7 +164,8 @@ class InstaDiscover:
                                 print(discover_user['username'] +
                                       ' takip isteği 15 günü aşmış user silinecek ve istek iptal edilecek!')
                             else:
-                                print(discover_user['username'] + ' takip isteği gönderilmiş beklemede 15 günü aşmamış.')
+                                print(
+                                    discover_user['username'] + ' takip isteği gönderilmiş beklemede 15 günü aşmamış.')
                             time.sleep(1)
                         elif user['followed_by_viewer'] is False:  # takip isteği atmışım ancak reddetmiş
                             print(discover_user['username'] + ' atılan takip isteğini iptal etmiş.')
@@ -211,19 +233,77 @@ class InstaDiscover:
             }
         )
 
+    def sync_followers(self):
+        profile = self.get_profile_info(self.account_name)
+        if profile is not None:
+            followerButtom = self.driver.find_elements(By.XPATH, "//*[@class='_aacl _aacp _aacu _aacx _aad6 _aade']")[1]
+            followerButtom.click()
+            time.sleep(2)  # loading followers
+            tempScrollHeight = self.driver.execute_script(
+                "return document.getElementsByClassName('_aano')[0].scrollHeight")
+            while True:
+                # scroll down
+                self.driver.execute_script(
+                    "document.getElementsByClassName('_aano')[0].scrollTop = document.getElementsByClassName('_aano')[0].scrollHeight")
+                time.sleep(2)  # scrolldown ediltikden sonra yuklemeyi bekliyoruz.
+                scrollHeight = self.driver.execute_script(
+                    "return document.getElementsByClassName('_aano')[0].scrollHeight")
+                if tempScrollHeight == scrollHeight:  # ayni scrollheight sahip ise daha sona gidermiyor demektir.
+                    print('ended scroll down')
+                    break
+                else:
+                    tempScrollHeight = scrollHeight
+
+            responses = self.read_network_logs(
+                self.url + '/api/v1/friendships/' + str(profile['id']) + '/followers/?count=12')
+            for response in responses:
+                for user in response['users']:
+                    where = "account_name='" + self.account_name + "' AND username='" + user['username'] + "'"
+                    if database_helper.find('followers', where, 'id,username') is None:
+                        database_helper.insert('followers', {
+                            'account_name': self.account_name,
+                            'insta_id': user['pk'],
+                            'username': user['username'],
+                            'full_name': user['full_name'],
+                            'is_verified': user['is_verified'],
+                            'profile_pic_url': user['profile_pic_url']
+                        })
+                    else:
+                        database_helper.update('followers', where, {
+                            'account_name': self.account_name,
+                            'insta_id': user['pk'],
+                            'username': user['username'],
+                            'full_name': user['full_name'],
+                            'is_verified': user['is_verified'],
+                            'profile_pic_url': user['profile_pic_url']
+                        }, False)
+            database_helper.commit()
+            print('synchronized followers')
+        else:
+            print('insta_id not found')
+
+    def get_profile_info(self, profile_name):
+        self.driver.get(self.url + '/' + profile_name + '/')
+        time.sleep(2)  # loading profile
+        response = self.read_network_log(self.url + '/api/v1/users/web_profile_info/?username=' + profile_name)
+        if response is not None:
+            if array_helper.keys_exists(response, ['data', 'user']) is True:
+                return response['data']['user']
+        return None
+
 
 if __name__ == '__main__':
     # try:
     logging.basicConfig(filename='process.log', encoding='utf-8', level=logging.INFO)
     insta = InstaDiscover()
     insta.login()
-
-    while True:
-        for i in range(1, 2, 1):
-            insta.discover()
-            time.sleep(2)
-        insta.check_up_users()
-        time.sleep(2)
+    insta.sync_followers()
+    # while True:
+    #     for i in range(1, 2, 1):
+    #         insta.discover()
+    #         time.sleep(2)
+    #     insta.check_up_users()
+    #     time.sleep(2)
     insta.close_browser()
 
     # except Exception:
