@@ -35,8 +35,10 @@ def insert(table, data, commit_status=False):
     return result
 
 
-def find_all(table, columns='*'):
+def find_all(table, columns='*', criteria=''):
     query = "SELECT " + columns + " FROM " + table + ""
+    if criteria != '':
+        query += ' WHERE ' + criteria
     cursor.execute(query)
     return cursor.fetchall()
 

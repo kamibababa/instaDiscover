@@ -362,16 +362,33 @@ class InstaDiscover:
         else:
             print('profile id not found')
 
+    def following_compare_to_followers(self):
+        whitelist = database_helper.find_all('whitelist', 'id,username', "account_name='" + self.account_name + "'")
+        username_whitelist = ''
+        for row in whitelist:
+            username_whitelist += "'" + row['username'] + "',"
+        if username_whitelist != '':
+            username_whitelist = username_whitelist.rstrip(',')
+        else:
+            username_whitelist = "''"
+
+        following = database_helper.find_all('following', 'id, username', "username NOT IN(" + username_whitelist + ")")
+        for follow in following:
+            find_result = database_helper.find(
+                'followers', "account_name='" + self.account_name + "' AND username='" + follow['username'] + "'",
+                'id,username')
+            if find_result is None:
+                print(follow['username'])
 
 
 if __name__ == '__main__':
     # try:
     logging.basicConfig(filename='process.log', encoding='utf-8', level=logging.INFO)
     insta = InstaDiscover()
-
-    insta.login()
+    insta.following_compare_to_followers()
+    # insta.login()
     # insta.sync_followers()
-    insta.sync_following()
+    # insta.sync_following()
     # while True:
     #     for i in range(1, 2, 1):
     #         insta.discover()
