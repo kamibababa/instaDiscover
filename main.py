@@ -385,10 +385,11 @@ if __name__ == '__main__':
     # try:
     logging.basicConfig(filename='process.log', encoding='utf-8', level=logging.INFO)
     insta = InstaDiscover()
+
+    insta.login()
+    insta.sync_followers()
+    insta.sync_following()
     insta.following_compare_to_followers()
-    # insta.login()
-    # insta.sync_followers()
-    # insta.sync_following()
     # while True:
     #     for i in range(1, 2, 1):
     #         insta.discover()

@@ -1,3 +1,6 @@
+## Getting Started
+- config.json 
+
 ## Requirements
 
 - [pip install selenium](https://selenium-python.readthedocs.io/installation.html)
