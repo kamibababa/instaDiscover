@@ -234,8 +234,8 @@ class InstaDiscover:
             }
         )
 
-    def get_profile_info(self, profile_name):
-        self.driver.get(self.url + '/' + profile_name + '/')
+    def get_profile_info(self, profile_name, url=''):
+        self.driver.get(self.url + '/' + profile_name + '/' + url)
         time.sleep(2)  # loading profile
         response = self.read_network_log(self.url + '/api/v1/users/web_profile_info/?username=' + profile_name)
         if response is not None:
@@ -244,10 +244,10 @@ class InstaDiscover:
         return None
 
     def sync_followers(self):
-        profile = self.get_profile_info(self.account_name)
+        profile = self.get_profile_info(self.account_name, 'followers')
         if profile is not None:
-            followerButtom = self.driver.find_elements(By.XPATH, "//*[@class='_aacl _aacp _aacu _aacx _aad6 _aade']")[1]
-            followerButtom.click()
+            # followerButtom = self.driver.find_elements(By.XPATH, "//*[@class='_aacl _aacp _aacu _aacx _aad6 _aade']")[1]
+            # followerButtom.click()
             time.sleep(2)  # loading followers
             tempScrollHeight = self.driver.execute_script(
                 "return document.getElementsByClassName('_aano')[0].scrollHeight")
@@ -303,10 +303,10 @@ class InstaDiscover:
             print('insta_id not found')
 
     def sync_following(self):
-        profile = self.get_profile_info(self.account_name)
+        profile = self.get_profile_info(self.account_name, 'following')
         if profile is not None:
-            followerButtom = self.driver.find_elements(By.XPATH, "//*[@class='_aacl _aacp _aacu _aacx _aad6 _aade']")[2]
-            followerButtom.click()
+            # followerButtom = self.driver.find_elements(By.XPATH, "//*[@class='_aacl _aacp _aacu _aacx _aad6 _aade']")[2]
+            # followerButtom.click()
 
             time.sleep(2)  # loading following
             tempScrollHeight = self.driver.execute_script(
